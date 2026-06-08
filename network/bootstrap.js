@@ -1,7 +1,7 @@
 import { readFileSync } from "fs";
 import { sign } from "crypto";
 
-const BOOTSTRAP_URL = "https://lattice-bootstrap-server.onrender.com/";
+const BOOTSTRAP_URL = "https://lattice-bootstrap-server.onrender.com";
 const UDP_PORT = 41234;
 
 // Discover our public IP (what the world sees us as)

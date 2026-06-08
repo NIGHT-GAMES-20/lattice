@@ -42,7 +42,7 @@ setTimeout(async () => {
 
 // Re-announce periodically so late-joining nodes can find us
 setInterval(() => broadcast(createHello(userId)), 30_000);
-setInterval(() => await announce(userId), 20 * 60 * 1000);
+setInterval(async () => await announce(userId), 20 * 60 * 1000);
 
 
 rl.on("line", (input) => {
