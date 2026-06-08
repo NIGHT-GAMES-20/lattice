@@ -24,7 +24,7 @@ console.log(`[Lattice] ID: ${userId.slice(0, 16)}...`);
 startUDP(userId);
 
 // Give the socket time to bind before we shout
-setTimeout(() => {
+setTimeout(async () => {
   
   //LAN
   broadcast(createHello(userId));
