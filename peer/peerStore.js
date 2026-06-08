@@ -10,15 +10,16 @@ const peers = new Map();
 
 // ─── Writes ───────────────────────────────────────────────────────────────────
 
-export function addPeer(userId, publicKey) {
-    peers.set(userId, { publicKey, lastSeen: Date.now() });
+export function addPeer(userId, publicKey, ip) {
+    peers.set(userId, { publicKey, ip , lastSeen: Date.now() });
     _persist();
 }
 
-export function touchPeer(userId) {
+export function touchPeer(userId, ip) {
     const peer = peers.get(userId);
     if (peer) {
         peer.lastSeen = Date.now();
+        if (ip) peer.ip = ip;
         _persist();
     }
 }
@@ -33,6 +34,11 @@ export function getPeer(userId) {
 export function getAllPeers() {
     _hydrate();
     return [...peers.entries()].map(([id, peer]) => ({ id, ...peer }));
+}
+
+export function getPeerIp(userId) {
+    _hydrate();
+    return peers.get(userId)?.ip ?? null;
 }
 
 // ─── Maintenance ──────────────────────────────────────────────────────────────

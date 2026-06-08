@@ -47,7 +47,15 @@ export default function createPacket(type, from, to, payload) {
         signature: "",
     };
 
-    packet.signature = signMessage(JSON.stringify(packet));
+    packet.signature = signMessage(JSON.stringify({
+        version:   packet.version,
+        id:        packet.id,
+        type:      packet.type,
+        from:      packet.from,
+        to:        packet.to,
+        timestamp: packet.timestamp,
+        payload:   packet.payload,
+    }));
 
     return packet;
 }

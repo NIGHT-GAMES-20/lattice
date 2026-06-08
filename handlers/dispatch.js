@@ -1,14 +1,14 @@
 import handleHello   from "./helloHandler.js";
 import handleMessage from "./messageHandler.js";
 
-export default function dispatch(packet) {
+export default function dispatch(packet, rinfo) {
     switch (packet.type) {
         case "HELLO":
-            handleHello(packet);
+            handleHello(packet, rinfo);
             break;
 
         case "MESSAGE":
-            handleMessage(packet);
+            handleMessage(packet, rinfo);
             break;
 
         default:

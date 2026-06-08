@@ -15,7 +15,15 @@ export default function verifyPacket(packet, publicKeyPem) {
     const { signature } = packet;
     if (!signature) return false;
 
-    const canonical = Buffer.from(JSON.stringify({ ...packet, signature: "" }));
+    const canonical = Buffer.from(JSON.stringify({
+        version:   packet.version,
+        id:        packet.id,
+        type:      packet.type,
+        from:      packet.from,
+        to:        packet.to,
+        timestamp: packet.timestamp,
+        payload:   packet.payload,
+    }));
 
     try {
         return crypto.verify(

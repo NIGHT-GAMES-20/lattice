@@ -2,8 +2,9 @@ import verifyPacket from "./verify.js";
 import crypto from "crypto";
 import { computeShared } from "../crypto/dh.js";
 import { addPeer, getPeer, touchPeer, setPeerSecret } from "../peer/peerStore.js";
+import relay from "../packets/relay.js";
 
-export default function handleHello(packet) {
+export default function handleHello(packet, rinfo) {
     const { from, payload } = packet;
 
     // ── Step 1: Basic structure checks ──────────────────────────────────────
@@ -39,10 +40,10 @@ export default function handleHello(packet) {
 
     // ── Step 4: Commit to peerStore ──────────────────────────────────────────
     if (getPeer(from)) {
-        touchPeer(from); // refresh lastSeen for a peer we already know
+        touchPeer(from, rinfo?.address); // refresh lastSeen for a peer we already know
         console.log(`[HELLO] Refreshed: ${from.slice(0, 16)}...`);
     } else {
-        addPeer(from, payload.publicKey);
+        addPeer(from, payload.publicKey, rinfo?.address);
         console.log(`[HELLO] New peer added: ${from.slice(0, 16)}...`);
     }
 
@@ -51,4 +52,9 @@ export default function handleHello(packet) {
         setPeerSecret(from, sharedSecret.toString("hex"));
         console.log(`[HELLO] Shared secret established with ${from.slice(0, 16)}...`);
     }
+
+    // ── Step 5: Relay the HELLO to other peers ───────────────────────────────
+    // We want everyone to know about this new peer, so we relay the HELLO packet as-is.
+    relay(packet);
+
 }

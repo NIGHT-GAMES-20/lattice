@@ -7,42 +7,23 @@ if (!existsSync("keys")) {
 }
 
 function generateKeys() {
-  const { publicKey: ed25519pub , privateKey: ed25519priv } = generateKeyPairSync("ed25519");
-  const { publicKey: x25519Pub, privateKey: x25519Priv } = generateKeyPairSync("x25519");
+    if (!existsSync("keys/ed25519_private.pem") || !existsSync("keys/ed25519_public.pem")) {
+        const { publicKey: ed25519pub, privateKey: ed25519priv } = generateKeyPairSync("ed25519");
+        writeFileSync("keys/ed25519_public.pem",  ed25519pub.export({ type: "spki",  format: "pem" }));
+        writeFileSync("keys/ed25519_private.pem", ed25519priv.export({ type: "pkcs8", format: "pem" }));
+        console.log("Ed25519 identity keys generated.");
+    } else {
+        console.log("Ed25519 keys already exist — skipping.");
+    }
 
-  writeFileSync(
-      "keys/ed25519_public.pem",  
-      ed25519pub.export({
-          type: "spki",
-          format: "pem",
-      })
-  );
-
-  writeFileSync(
-      "keys/ed25519_private.pem",
-      ed25519priv.export({
-          type: "pkcs8",
-          format: "pem",
-      })
-  );
-
-  writeFileSync(
-    "keys/x25519_public.pem",  
-    x25519Pub.export({ 
-      type: "spki",  
-      format: "pem" 
-    })
-  );
-
-  writeFileSync(
-    "keys/x25519_private.pem", 
-    x25519Priv.export({ 
-      type: "pkcs8", 
-      format: "pem" 
-    })
-  );
-
-  console.log("Keys generated!");
+    if (!existsSync("keys/x25519_private.pem") || !existsSync("keys/x25519_public.pem")) {
+        const { publicKey: x25519Pub, privateKey: x25519Priv } = generateKeyPairSync("x25519");
+        writeFileSync("keys/x25519_public.pem",  x25519Pub.export({ type: "spki",  format: "pem" }));
+        writeFileSync("keys/x25519_private.pem", x25519Priv.export({ type: "pkcs8", format: "pem" }));
+        console.log("X25519 encryption keys generated.");
+    } else {
+        console.log("X25519 keys already exist — skipping.");
+    }
 }
 
 function getPublicKey() {

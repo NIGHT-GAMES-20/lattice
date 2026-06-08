@@ -5,6 +5,7 @@ import { startUDP, broadcast } from "./transport/udp.js";
 import readline from "readline";
 import createMessage from "./packets/createMessage.js";
 import { getAllPeers } from "./peer/peerStore.js";
+import { announce, fetchPeers } from "./network/bootstrap.js";
 
 const rl = readline.createInterface({ input: process.stdin });
 
@@ -23,10 +24,25 @@ console.log(`[Lattice] ID: ${userId.slice(0, 16)}...`);
 startUDP(userId);
 
 // Give the socket time to bind before we shout
-setTimeout(() => broadcast(createHello(userId)), 500);
+setTimeout(() => {
+  
+  //LAN
+  broadcast(createHello(userId));
+
+  // Internet — announce ourselves, then greet every known peer directly
+  await announce(userId);
+
+  const peers = await fetchPeers();
+  for (const peer of peers) {
+      if (peer.userid === userId) continue; // don't hello ourselves
+      console.log(`[Bootstrap] Sending HELLO → ${peer.ip}:${peer.port}`);
+      send(createHello(userId), peer.ip);
+  }
+}, 500);
 
 // Re-announce periodically so late-joining nodes can find us
 setInterval(() => broadcast(createHello(userId)), 30_000);
+setInterval(() => await announce(userId), 20 * 60 * 1000);
 
 
 rl.on("line", (input) => {
@@ -46,7 +62,14 @@ rl.on("line", (input) => {
         const text = rest.join(" ");
         const peer = getAllPeers().find(p => p.id.startsWith(target));
         if (!peer) return console.log(`[Lattice] Unknown peer prefix: ${target}`);
-        broadcast(createMessage(userId, peer.id, text));
+        msg = createMessage(userId, peer.id, text);
+        const peerIp = getPeerIp(peer.id);
+        if (peerIp) {
+            send(msg, peerIp);
+            console.log(`[Lattice] → direct to ${peer.id.slice(0, 12)}... @ ${peerIp}`);
+        } else {
+            broadcast(msg);
+        }
     } else {
         // Plaintext broadcast to all
         broadcast(createMessage(userId, "*", line));

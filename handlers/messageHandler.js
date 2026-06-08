@@ -1,8 +1,11 @@
 import { getPeer, getSharedSecret } from "../peer/peerStore.js";
+import { getPublicKey } from "../crypto/key.js";
+import getUserId  from "../crypto/userId.js";
 import verifyPacket from "./verify.js";
 import { decrypt } from "../crypto/dh.js";
+import relay from "../packets/relay.js";
 
-export default function handleMessage(packet) {
+export default function handleMessage(packet, rinfo) {
     const { from, to, payload } = packet;
 
     if (!from || !payload) {
@@ -23,6 +26,12 @@ export default function handleMessage(packet) {
 
     let text;
     if (payload.encrypted) {
+      if (to !== getUserId(getPublicKey())) {
+        console.warn(`[MESSAGE] Relayed: encrypted message not intended for us (to ${to.slice(0, 12)}...)`);
+        relay(packet)
+        return;
+      }
+
         const sharedSecret = getSharedSecret(from);
         if (!sharedSecret) {
             console.warn(`[MESSAGE] No shared secret for ${from.slice(0, 12)}... — drop`);
