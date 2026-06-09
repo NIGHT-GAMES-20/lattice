@@ -100,8 +100,8 @@ export function send(packet, host, port) {
 }
 
 function getSubnetBroadcasts() {
+  const addrs = [];
   try{
-    const addrs = [];
     for (const ifaces of Object.values(networkInterfaces())) {
         for (const iface of ifaces) {
           
