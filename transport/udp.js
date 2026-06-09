@@ -36,6 +36,36 @@ export function initTransport(udpSocket, userId) {
         dispatch(packet, rinfo);
     });
 
+    // Second socket purely for receiving LAN broadcasts on the known port.
+    // The main socket can't listen on 41234 (it's floating), but it CAN send to
+    // subnet:41234. This socket picks those packets up.
+    const lanSocket = dgram.createSocket({ type: "udp4", reuseAddr: true });
+
+    lanSocket.on("message", (msg, rinfo) => {
+        let packet;
+        try { packet = JSON.parse(msg.toString()); }
+        catch { return; }
+
+        if (!packet.id || !packet.from) return;
+        if (packet.from === selfId) return;
+        if (seenPackets.has(packet.id)) return;    // shared dedup set — no double processing
+        seenPackets.add(packet.id);
+        if (typeof packet.ttl !== "number" || packet.ttl <= 0) return;
+
+        console.log(`[LAN] ← ${rinfo.address}:${rinfo.port}  type=${packet.type}  id=${packet.id?.slice(0, 8)}...`);
+        dispatch(packet, rinfo);
+    });
+
+    lanSocket.on("error", (err) => {
+        // Non-fatal — another instance may already hold 41234 on this machine
+        console.warn("[UDP] LAN socket:", err.message);
+    });
+
+    lanSocket.bind(41234, () => {
+        lanSocket.setBroadcast(true);
+        console.log("[UDP] LAN discovery on port 41234");
+    });
+
     console.log("[UDP] Transport ready");
 }
 

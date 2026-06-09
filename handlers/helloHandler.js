@@ -39,13 +39,9 @@ export default function handleHello(packet, rinfo) {
         return;
     }
 
-    // --- Step 3.5 ------------------------------------------------------------
+  
     // Reply directly to their observed address immediately — this is what keeps
     // the NAT hole open and lets the remote node hear back from us
-    if (rinfo?.address && rinfo?.port) {
-        latticeEvents.emit("punch_back", rinfo.address, rinfo.port);
-    }
-
     // ── Step 4: Commit to peerStore ──────────────────────────────────────────
     if (getPeer(from)) {
         touchPeer(from, rinfo?.address, rinfo?.port); // refresh lastSeen for a peer we already know
@@ -53,6 +49,10 @@ export default function handleHello(packet, rinfo) {
     } else {
         addPeer(from, payload.publicKey, rinfo?.address, rinfo?.port);
         console.log(`[HELLO] New peer added: ${from.slice(0, 16)}...`);
+
+        if (rinfo?.address && rinfo?.port) {
+            latticeEvents.emit("punch_back", rinfo.address, rinfo.port);
+        }
     }
 
     if (payload.x25519PublicKey) {
