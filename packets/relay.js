@@ -1,4 +1,4 @@
-import { broadcast } from "../transport/udp.js";
+import { broadcastLAN } from "../transport/lan.js";
 
 /**
  * Relays a packet to other peers in the network.
@@ -23,5 +23,5 @@ export default function relay(packet) {
   };
 
   // Broadcast to all peers
-  broadcast(relayedPacket);
+  broadcastLAN(relayedPacket);
 }

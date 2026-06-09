@@ -5,7 +5,7 @@ import { addPeer, getPeer, touchPeer, setPeerSecret } from "../peer/peerStore.js
 import { latticeEvents } from "../core/events.js";
 import relay from "../packets/relay.js";
 
-export default function handleHello(packet, rinfo) {
+export default function handleHello(packet, rinfo, type) {
     const { from, payload } = packet;
 
     // ── Step 1: Basic structure checks ──────────────────────────────────────
@@ -44,11 +44,11 @@ export default function handleHello(packet, rinfo) {
     // the NAT hole open and lets the remote node hear back from us
     // ── Step 4: Commit to peerStore ──────────────────────────────────────────
     if (getPeer(from)) {
-        touchPeer(from, rinfo?.address, rinfo?.port); // refresh lastSeen for a peer we already know
+        touchPeer(from, rinfo?.address, rinfo?.port, type); // refresh lastSeen for a peer we already know
         console.log(`[HELLO] Refreshed: ${from.slice(0, 16)}...`);
 
     } else {
-        addPeer(from, payload.publicKey, rinfo?.address, rinfo?.port);
+        addPeer(from, payload.publicKey, rinfo?.address, rinfo?.port, type);
         console.log(`[HELLO] New peer added: ${from.slice(0, 16)}...`);
 
         if (rinfo?.address && rinfo?.port) {

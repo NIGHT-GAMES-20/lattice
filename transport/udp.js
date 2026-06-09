@@ -1,24 +1,22 @@
-import dgram from "dgram";
+import dgram, { Socket } from "dgram";
 import dispatch from "../handlers/dispatch.js";
 import { networkInterfaces } from "os";
+import { getUserId } from "../core/utils.js"
 
-const PORT           = 41234;
-const BROADCAST_ADDR = "255.255.255.255";
-const seenPackets = new Set(); // deduplication — prevents processing the same packet twice
 
-let socket = null;
-let selfId = null;
+let udp = null;
+let selfId = getUserId();
 
 /**
- * Starts the UDP socket for listening and broadcasting messages.
+ * Starts the UDP socket for listening and broadcasting messages over the Internet.
  * 
- * @param {string} userId - sha256 encoded public key
+ * @param {Socket} udpSocket - Socket for Communication over the Internet
+ * @param {Set} seenPackets
  */
-export function initTransport(udpSocket, userId) {
-    socket = udpSocket;
-    selfId = userId;
+export function initUDP(udpSocket, seenPackets) {
+    udp = udpSocket;
 
-    socket.on("message", (msg, rinfo) => {
+    udp.on("message", (msg, rinfo) => {
         let packet;
         try {
             packet = JSON.parse(msg.toString());
@@ -30,61 +28,16 @@ export function initTransport(udpSocket, userId) {
         if (packet.from === selfId) return;
         if (seenPackets.has(packet.id)) return;
         seenPackets.add(packet.id);
-        if (typeof packet.ttl !== "number" || packet.ttl <= 0) return;
+        if (typeof packet.ttl !== "number" || packet.ttl < 0) return;
 
         console.log(`[UDP] ← ${rinfo.address}:${rinfo.port}  type=${packet.type}  id=${packet.id?.slice(0, 8)}...`);
-        dispatch(packet, rinfo);
-    });
-
-    // Second socket purely for receiving LAN broadcasts on the known port.
-    // The main socket can't listen on 41234 (it's floating), but it CAN send to
-    // subnet:41234. This socket picks those packets up.
-    const lanSocket = dgram.createSocket({ type: "udp4", reuseAddr: true });
-
-    lanSocket.on("message", (msg, rinfo) => {
-        let packet;
-        try { packet = JSON.parse(msg.toString()); }
-        catch { return; }
-
-        if (!packet.id || !packet.from) return;
-        if (packet.from === selfId) return;
-        if (seenPackets.has(packet.id)) return;    // shared dedup set — no double processing
-        seenPackets.add(packet.id);
-        if (typeof packet.ttl !== "number" || packet.ttl <= 0) return;
-
-        console.log(`[LAN] ← ${rinfo.address}:${rinfo.port}  type=${packet.type}  id=${packet.id?.slice(0, 8)}...`);
-        dispatch(packet, rinfo);
-    });
-
-    lanSocket.on("error", (err) => {
-        // Non-fatal — another instance may already hold 41234 on this machine
-        console.warn("[UDP] LAN socket:", err.message);
-    });
-
-    lanSocket.bind(41234, () => {
-        lanSocket.setBroadcast(true);
-        console.log("[UDP] LAN discovery on port 41234");
+        dispatch(packet, rinfo, "udp");
     });
 
     console.log("[UDP] Transport ready");
 }
 
-/**
- * Broadcasts a packet to all peers on the network.
- * 
- * @param {Packet} packet - The packet to broadcast
- */
-export function broadcast(packet) {
-    const buf = Buffer.from(JSON.stringify(packet));
 
-    for (const addr of getSubnetBroadcasts()) {
-        socket.send(buf, PORT, addr, (err) => {
-            if (err) console.error(`[UDP] Broadcast error on ${addr}:`, err);
-        });
-    }
-
-    console.log(`[UDP] → broadcast  type=${packet.type}  id=${packet.id?.slice(0, 8)}...`);
-}
 /**
  * Direct message to a known IP (used once we store peer IPs)
  * 
@@ -92,32 +45,9 @@ export function broadcast(packet) {
  * @param {string} host   - The destination IP address
  * @param {Number} port - The destination Port 
  */
-export function send(packet, host, port) {
+export function sendUDP(packet, host, port) {
     const buf = Buffer.from(JSON.stringify(packet));
-    socket.send(buf, port, host, (err) => {
+    udp.send(buf, port, host, (err) => {
         if (err) console.error(`[UDP] Send error to ${host}:${port}:`, err);
     });
-}
-
-function getSubnetBroadcasts() {
-  const addrs = [];
-  try{
-    for (const ifaces of Object.values(networkInterfaces())) {
-        for (const iface of ifaces) {
-          
-            if (iface.family === "IPv4" && !iface.internal) {
-                const ip    = iface.address.split(".").map(Number);
-                const mask  = iface.netmask.split(".").map(Number);
-                const bcast = ip.map((b, i) => (b | (~mask[i] & 255))).join(".");
-
-                if (bcast === iface.address) continue; // ← skip /32 (Tailscale, VPN, etc.)
-
-                addrs.push(bcast);
-            }
-        }
-    } 
-  } catch {
-    console.log("[BROADCAST] Failed to get subnet")
-  }
-    return addrs.length ? addrs : ["255.255.255.255"];
 }

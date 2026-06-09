@@ -1,32 +1,35 @@
 import dgram from "dgram";
 import { readFileSync, existsSync } from "fs";
-import getUserId    from "./crypto/userId.js";
-import createHello  from "./packets/createHello.js";
-import { initTransport, send, broadcast } from "./transport/udp.js";
+import { getUserId } from "./core/utils.js";
+import createHello from "./packets/createHello.js";
+import { sendUDP, initUDP } from "./transport/udp.js";
 import { announce, fetchPeers } from "./network/bootstrap.js";
 import StunManager from "./network/stun.js";
 import readline from "readline";
 import createMessage from "./packets/createMessage.js";
-import { getAllPeers, getPeerIp, getPeerPort } from "./peer/peerStore.js";
+import { getAllPeers, getPeerIp, getPeerPort, getPeerType } from "./peer/peerStore.js";
 import { latticeEvents } from "./core/events.js";
+import { generateKeys } from "./crypto/key.js";
+import { initLAN, sendLAN, broadcastLAN } from "./transport/lan.js";
 
 if (!existsSync("keys/ed25519_private.pem")) {
-    console.error("[Lattice] Keys missing. Run: node crypto/key.js");
-    process.exit(1);
+    console.warn("[Lattice] Keys missing. Creating New Pairs");
+    generateKeys()
 }
 
-const publicKey = readFileSync("keys/ed25519_public.pem", "utf8");
-const userId    = getUserId(publicKey);
-const socket    = dgram.createSocket({ type: "udp4", reuseAddr: true });
+const userId    = getUserId();
+const udpSocket    = dgram.createSocket({ type: "udp4", reuseAddr: true });
+const lanSocket    = dgram.createSocket({ type: "udp4", reuseAddr: true });
+const seenPackets = new Set()
 
 console.log("[Lattice] Node starting...");
 console.log(`[Lattice] ID: ${userId.slice(0, 16)}...`);
 
-socket.bind(0, async () => {
-    console.log(`[UDP] Socket bound on port ${socket.address().port}`);
+udpSocket.bind(0, async () => {
+    console.log(`[UDP] Socket bound on port ${udpSocket.address().port}`);
 
     // 1 — discover public endpoint via STUN
-    const stun = new StunManager(socket);
+    const stun = new StunManager(udpSocket);
     const endpoint = await stun.start();
     console.log(`[STUN] Public endpoint: ${endpoint.ip}:${endpoint.port}`);
     if (endpoint.symmetricNat) {
@@ -34,7 +37,7 @@ socket.bind(0, async () => {
     }
 
     // 2 — wire up Lattice transport on this socket
-    initTransport(socket, userId);
+    initUDP(udpSocket, seenPackets);
 
     latticeEvents.on("punch_back", (ip, port) => {
         send(createHello(userId), ip, port);
@@ -49,25 +52,32 @@ socket.bind(0, async () => {
         console.log(`[Punch] → ${peer.ip}:${peer.port}`);
         // Send several HELLOs rapidly — the HELLO itself punches the hole
         for (let i = 0; i < 6; i++) {
-            setTimeout(() => send(createHello(userId), peer.ip, peer.port), i * 300);
+            setTimeout(() => sendUDP(createHello(userId), peer.ip, peer.port), i * 300);
         }
     }
 
-    // 4 — LAN broadcast
+    // 4 — re-announce every 20 min to stay in bootstrap registry
+    setInterval(async () => {
+        const fresh = await stun.discover(); // re-check endpoint hasn't changed
+        await announce(userId, fresh.ip, fresh.port);
+    }, 20 * 60 * 1000);
+});
+
+lanSocket.bind(41234, async () => {
+    console.log(`[LAN] Socket bound on port ${udpSocket.address().port}`);
+
+    // 1 — wire up Lattice transport on this socket
+    initLAN(lanSocket, seenPackets);
+
+    // 2 — LAN broadcast
     setInterval (()=>{
       broadcast(createHello(userId));
     }, 30_000)
 
-    // 5 — re-announce every 20 min to stay in bootstrap registry
-    setInterval(async () => {
-        const fresh = await stun.discover(); // re-check endpoint hasn't changed
-        await announce(userId, fresh.ip, fresh.port);
-        broadcast(createHello(userId));
-    }, 20 * 60 * 1000);
 });
 
+
 // REPL (same as before)
-latticeEvents.on("request_hello", () => broadcast(createHello(userId)));
 
 const rl = readline.createInterface({ input: process.stdin });
 rl.on("line", (input) => {
@@ -87,8 +97,13 @@ rl.on("line", (input) => {
         const msg = createMessage(userId, peer.id, text);
         const ip   = getPeerIp(peer.id);
         const port = getPeerPort(peer.id);
-        if (ip && port) send(msg, ip, port);
-        else broadcast(msg);
+        if (ip && port){
+          if (getPeerType() == "lan") sendLAN(msg, ip, port);
+          else if (getPeerType() == "udp") sendUDP(msg, ip, port);
+        }
+        else {
+          if (getPeerType() == "lan") broadcast(msg);
+        }
     } else {
         broadcast(createMessage(userId, "*", line));
     }

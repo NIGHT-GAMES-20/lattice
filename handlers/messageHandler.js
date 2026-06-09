@@ -1,13 +1,13 @@
 import { getPeer, getSharedSecret } from "../peer/peerStore.js";
 import { getPublicKey } from "../crypto/key.js";
-import getUserId  from "../crypto/userId.js";
+import { getUserId } from "../core/utils.js";
 import verifyPacket from "./verify.js";
 import { decrypt } from "../crypto/dh.js";
 import relay from "../packets/relay.js";
 
-const MY_USER_ID = getUserId(getPublicKey())
+const MY_USER_ID = getUserId()
 
-export default function handleMessage(packet, rinfo) {
+export default function handleMessage(packet, rinfo, type) {
     const { from, to, payload } = packet;
 
     if (!from || !payload) {
