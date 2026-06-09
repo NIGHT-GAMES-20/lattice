@@ -53,8 +53,10 @@ socket.bind(0, async () => {
         }
     }
 
-    // 4 — LAN broadcast (optional, works if others are on same subnet)
-    broadcast(createHello(userId));
+    // 4 — LAN broadcast
+    setInterval (()=>{
+      broadcast(createHello(userId));
+    }, 30_000)
 
     // 5 — re-announce every 20 min to stay in bootstrap registry
     setInterval(async () => {
