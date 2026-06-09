@@ -2,14 +2,6 @@ import { readFileSync } from "fs";
 import { sign } from "crypto";
 
 const BOOTSTRAP_URL = "https://lattice-bootstrap-server.onrender.com";
-const UDP_PORT = 41234;
-
-// Discover our public IP (what the world sees us as)
-async function getPublicIP() {
-    const res = await fetch("https://api.ipify.org?format=json");
-    const { ip } = await res.json();
-    return ip;
-}
 
 // Sign the announce payload — must match the server's canonical form exactly
 function signAnnounce(userid, ip, port) {
@@ -18,24 +10,22 @@ function signAnnounce(userid, ip, port) {
     return sign(null, canonical, privateKey).toString("base64");
 }
 
-// Tell the bootstrap server we exist
-export async function announce(userId) {
+export async function announce(userId, ip, port) {
     try {
-        const ip        = await getPublicIP();
         const publicKey = readFileSync("keys/ed25519_public.pem", "utf8");
-        const signature = signAnnounce(userId, ip, UDP_PORT);
+        const signature = signAnnounce(userId, ip, port);
 
         const res = await fetch(`${BOOTSTRAP_URL}/announce`, {
             method:  "POST",
             headers: { "Content-Type": "application/json" },
-            body:    JSON.stringify({ userid: userId, ip, port: UDP_PORT, publicKey, signature }),
+            body:    JSON.stringify({ userid: userId, ip, port, publicKey, signature }),
         });
 
         const data = await res.json();
         if (data.success) {
-            console.log(`[Bootstrap] Announced  →  ${ip}:${UDP_PORT}`);
+            console.log(`[Bootstrap] Announced → ${ip}:${port}`);
         } else {
-            console.warn("[Bootstrap] Announce rejected:", data.error);
+            console.warn("[Bootstrap] Rejected:", data.error);
         }
     } catch (err) {
         console.error("[Bootstrap] Announce failed:", err.message);

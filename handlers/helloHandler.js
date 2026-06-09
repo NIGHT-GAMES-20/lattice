@@ -40,10 +40,10 @@ export default function handleHello(packet, rinfo) {
 
     // ── Step 4: Commit to peerStore ──────────────────────────────────────────
     if (getPeer(from)) {
-        touchPeer(from, rinfo?.address); // refresh lastSeen for a peer we already know
+        touchPeer(from, rinfo?.address, rinfo?.port); // refresh lastSeen for a peer we already know
         console.log(`[HELLO] Refreshed: ${from.slice(0, 16)}...`);
     } else {
-        addPeer(from, payload.publicKey, rinfo?.address);
+        addPeer(from, payload.publicKey, rinfo?.address, rinfo?.port);
         console.log(`[HELLO] New peer added: ${from.slice(0, 16)}...`);
     }
 

@@ -4,10 +4,9 @@ import { networkInterfaces } from "os";
 
 const PORT           = 41234;
 const BROADCAST_ADDR = "255.255.255.255";
-
-const socket      = dgram.createSocket({ type: "udp4", reuseAddr: true });
 const seenPackets = new Set(); // deduplication — prevents processing the same packet twice
 
+let socket = null;
 let selfId = null;
 
 /**
@@ -15,47 +14,29 @@ let selfId = null;
  * 
  * @param {string} userId - sha256 encoded public key
  */
-export function startUDP(userId) {
+export function initTransport(udpSocket, userId) {
+    socket = udpSocket;
     selfId = userId;
-
-    socket.on("error", (err) => {
-        console.error("[UDP] Socket error:", err);
-        socket.close();
-    });
 
     socket.on("message", (msg, rinfo) => {
         let packet;
-
         try {
             packet = JSON.parse(msg.toString());
         } catch {
-            console.warn(`[UDP] Malformed packet from ${rinfo.address} — dropping`);
-            return;
+            return; // ignore STUN binary frames and punch noise
         }
 
-        // Ignore our own broadcasts (we hear ourselves on 255.255.255.255)
+        if (!packet.id || !packet.from) return; // not a Lattice packet
         if (packet.from === selfId) return;
-
-        // Drop already-seen packets (loop prevention)
         if (seenPackets.has(packet.id)) return;
         seenPackets.add(packet.id);
+        if (typeof packet.ttl !== "number" || packet.ttl <= 0) return;
 
-        // TTL gate
-        if (typeof packet.ttl !== "number" || packet.ttl <= 0) {
-            console.warn(`[UDP] Packet ${packet.id?.slice(0, 8)} TTL exhausted — dropping`);
-            return;
-        }
-
-        console.log(`[UDP] ← ${rinfo.address}  type=${packet.type}  id=${packet.id?.slice(0, 8)}...`);
+        console.log(`[UDP] ← ${rinfo.address}:${rinfo.port}  type=${packet.type}  id=${packet.id?.slice(0, 8)}...`);
         dispatch(packet, rinfo);
     });
 
-    socket.on("listening", () => {
-        socket.setBroadcast(true);
-        console.log(`[UDP] Listening on port ${PORT}`);
-    });
-
-    socket.bind(PORT);
+    console.log("[UDP] Transport ready");
 }
 
 /**
@@ -79,11 +60,12 @@ export function broadcast(packet) {
  * 
  * @param {Packet} packet - The packet to broadcast
  * @param {string} host   - The destination IP address
+ * @param {Number} port - The destination Port 
  */
-export function send(packet, host) {
+export function send(packet, host, port) {
     const buf = Buffer.from(JSON.stringify(packet));
-    socket.send(buf, PORT, host, (err) => {
-        if (err) console.error(`[UDP] Send error to ${host}:`, err);
+    socket.send(buf, port, host, (err) => {
+        if (err) console.error(`[UDP] Send error to ${host}:${port}:`, err);
     });
 }
 
