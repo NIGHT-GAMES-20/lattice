@@ -47,9 +47,6 @@ export default function handleHello(packet, rinfo) {
         touchPeer(from, rinfo?.address, rinfo?.port); // refresh lastSeen for a peer we already know
         console.log(`[HELLO] Refreshed: ${from.slice(0, 16)}...`);
 
-        if (rinfo?.address && rinfo?.port) {
-            latticeEvents.emit("punch_back", rinfo.address, rinfo.port);
-        }
     } else {
         addPeer(from, payload.publicKey, rinfo?.address, rinfo?.port);
         console.log(`[HELLO] New peer added: ${from.slice(0, 16)}...`);
