@@ -71,7 +71,7 @@ lanSocket.bind(41234, async () => {
 
     // 2 — LAN broadcast
     setInterval (()=>{
-      broadcast(createHello(userId));
+      broadcastLAN(createHello(userId));
     }, 30_000)
 
 });
