@@ -74,12 +74,15 @@ function getSubnetBroadcasts() {
     for (const ifaces of Object.values(networkInterfaces())) {
         for (const iface of ifaces) {
             if (iface.family === "IPv4" && !iface.internal) {
-                const ip   = iface.address.split(".").map(Number);
-                const mask = iface.netmask.split(".").map(Number);
+                const ip    = iface.address.split(".").map(Number);
+                const mask  = iface.netmask.split(".").map(Number);
                 const bcast = ip.map((b, i) => (b | (~mask[i] & 255))).join(".");
+
+                if (bcast === iface.address) continue; // ← skip /32 (Tailscale, VPN, etc.)
+
                 addrs.push(bcast);
             }
         }
     }
-    return addrs.length ? addrs : ["255.255.255.255"]; // fallback
+    return addrs.length ? addrs : ["255.255.255.255"];
 }
