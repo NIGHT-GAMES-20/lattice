@@ -36,6 +36,10 @@ socket.bind(0, async () => {
     // 2 — wire up Lattice transport on this socket
     initTransport(socket, userId);
 
+    latticeEvents.on("punch_back", (ip, port) => {
+        send(createHello(userId), ip, port);
+    });
+
     // 3 — announce to bootstrap + greet known peers
     await announce(userId, endpoint.ip, endpoint.port);
     const peers = await fetchPeers();

@@ -60,9 +60,13 @@ export function cleanPeers() {
 // ─── Private helpers ──────────────────────────────────────────────────────────
 
 function _persist() {
-    if (!existsSync(PEERS_DIR)) mkdirSync(PEERS_DIR);
-    const data = [...peers.entries()];
-    writeFileSync(PEERS_FILE, JSON.stringify(data, null, 2));
+    try {
+        if (!existsSync(PEERS_DIR)) mkdirSync(PEERS_DIR, { recursive: true });
+        const data = [...peers.entries()];
+        writeFileSync(PEERS_FILE, JSON.stringify(data, null, 2));
+    } catch (err) {
+        console.error("[PeerStore] Failed to persist:", err.message);
+    }
 }
 
 function _hydrate() {

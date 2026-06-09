@@ -5,6 +5,8 @@ import verifyPacket from "./verify.js";
 import { decrypt } from "../crypto/dh.js";
 import relay from "../packets/relay.js";
 
+const MY_USER_ID = getUserId(getPublicKey())
+
 export default function handleMessage(packet, rinfo) {
     const { from, to, payload } = packet;
 
@@ -26,7 +28,7 @@ export default function handleMessage(packet, rinfo) {
 
     let text;
     if (payload.encrypted) {
-      if (to !== getUserId(getPublicKey())) {
+      if (to !== MY_USER_ID) {
         console.warn(`[MESSAGE] Relayed: encrypted message not intended for us (to ${to.slice(0, 12)}...)`);
         relay(packet)
         return;

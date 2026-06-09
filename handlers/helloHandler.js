@@ -2,6 +2,7 @@ import verifyPacket from "./verify.js";
 import crypto from "crypto";
 import { computeShared } from "../crypto/dh.js";
 import { addPeer, getPeer, touchPeer, setPeerSecret } from "../peer/peerStore.js";
+import { latticeEvents } from "../core/events.js";
 import relay from "../packets/relay.js";
 
 export default function handleHello(packet, rinfo) {
@@ -36,6 +37,13 @@ export default function handleHello(packet, rinfo) {
     if (!verifyPacket(packet, payload.publicKey)) {
         console.warn(`[HELLO] Dropped: invalid signature from ${from.slice(0, 12)}...`);
         return;
+    }
+
+    // --- Step 3.5 ------------------------------------------------------------
+    // Reply directly to their observed address immediately — this is what keeps
+    // the NAT hole open and lets the remote node hear back from us
+    if (rinfo?.address && rinfo?.port) {
+        latticeEvents.emit("punch_back", rinfo.address, rinfo.port);
     }
 
     // ── Step 4: Commit to peerStore ──────────────────────────────────────────
