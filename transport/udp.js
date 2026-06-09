@@ -103,6 +103,7 @@ function getSubnetBroadcasts() {
     const addrs = [];
     for (const ifaces of Object.values(networkInterfaces())) {
         for (const iface of ifaces) {
+          try{
             if (iface.family === "IPv4" && !iface.internal) {
                 const ip    = iface.address.split(".").map(Number);
                 const mask  = iface.netmask.split(".").map(Number);
@@ -112,6 +113,9 @@ function getSubnetBroadcasts() {
 
                 addrs.push(bcast);
             }
+          } catch {
+            console.log("[BROADCAST] Failed to get subnet")
+          }
         }
     }
     return addrs.length ? addrs : ["255.255.255.255"];
