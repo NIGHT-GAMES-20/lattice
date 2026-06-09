@@ -40,7 +40,7 @@ udpSocket.bind(0, async () => {
     initUDP(udpSocket, seenPackets);
 
     latticeEvents.on("punch_back", (ip, port) => {
-        send(createHello(userId), ip, port);
+        sendUDP(createHello(userId), ip, port);
     });
 
     // 3 — announce to bootstrap + greet known peers
@@ -64,10 +64,13 @@ udpSocket.bind(0, async () => {
 });
 
 lanSocket.bind(41234, async () => {
-    console.log(`[LAN] Socket bound on port ${udpSocket.address().port}`);
+    console.log(`[LAN] Socket bound on port ${lanSocket.address().port}`);
+
+    lanSocket.setBroadcast(true);
 
     // 1 — wire up Lattice transport on this socket
     initLAN(lanSocket, seenPackets);
+    broadcastLAN(createHello(userId)); 
 
     // 2 — LAN broadcast
     setInterval (()=>{
@@ -98,11 +101,11 @@ rl.on("line", (input) => {
         const ip   = getPeerIp(peer.id);
         const port = getPeerPort(peer.id);
         if (ip && port){
-          if (getPeerType() == "lan") sendLAN(msg, ip, port);
-          else if (getPeerType() == "udp") sendUDP(msg, ip, port);
+          if (getPeerType(peer.id) == "lan") sendLAN(msg, ip, port);
+          else if (getPeerType(peer.id) == "udp") sendUDP(msg, ip, port);
         }
         else {
-          if (getPeerType() == "lan") broadcast(msg);
+          if (getPeerType(peer.id) == "lan") broadcast(msg);
         }
     } else {
         broadcast(createMessage(userId, "*", line));

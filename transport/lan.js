@@ -1,14 +1,14 @@
 import dispatch from "../handlers/dispatch.js";
 import { networkInterfaces } from "os";
 import { getUserId } from "../core/utils.js" ;
-import { Socket } from "dgram";
+
 
 const PORT           = 41234;
 const BROADCAST_ADDR = "255.255.255.255";
 
 /**
  * Socket for communication for Local net
- * @type {Socket}
+ * @type {import('dgram').Socket}
  */
 let lan = null;
 
@@ -73,14 +73,14 @@ export function broadcastLAN(packet) {
     for (const addr of getSubnetBroadcasts()) {
       try{
         lan.send(buf, PORT, addr, (err) => {
-            if (err) console.error(`[UDP] Broadcast error on ${addr}:`, err);
+            if (err) console.error(`[LAN] Broadcast error on ${addr}:`, err);
         });
       } catch {
       console.log(`[BROADCAST] Failed To send to ${addr}`)
       }
     }
 
-    console.log(`[UDP] → broadcast  type=${packet.type}  id=${packet.id?.slice(0, 8)}...`);
+    console.log(`[LAN] → broadcast  type=${packet.type}  id=${packet.id?.slice(0, 8)}...`);
 }
 
 
