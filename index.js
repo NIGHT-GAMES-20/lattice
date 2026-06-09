@@ -17,10 +17,9 @@ const Peers = AstraDB.collection("peers");
 app.post('/announce', async (req, res) => {
   try {
     const {userid, ip, port, publicKey, signature} = req.body;
-    if (!userid || !ip || !port /* || !publicKey || !signature */) {
+    if (!userid || !ip || !port || !publicKey || !signature) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
-    /*
     const canonical = Buffer.from(JSON.stringify({ userid, ip, port }));
 
     const valid = verify(
@@ -33,13 +32,12 @@ app.post('/announce', async (req, res) => {
     if (!valid) {
       return res.status(400).json({ error: 'Invalid signature' });
     }
-    */
     const existingPeer = await Peers.findOne({ userid });
     if (existingPeer) {
-      await Peers.updateOne({ userid }, { $set: { ip, port, /*publicKey,*/ timestamp: new Date() } });
+      await Peers.updateOne({ userid }, { $set: { ip, port, publicKey, timestamp: new Date() } });
     }
     else {
-      await Peers.insertOne({ userid, ip, port, /*publicKey,*/ timestamp: new Date() });
+      await Peers.insertOne({ userid, ip, port, publicKey, timestamp: new Date() });
     }
     res.json({ success: true });
   } catch (error) {
