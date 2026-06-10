@@ -4,6 +4,7 @@ import { computeShared } from "../crypto/dh.js";
 import { addPeer, getPeer, touchPeer, setPeerSecret } from "../peer/peerStore.js";
 import { latticeEvents } from "../core/events.js";
 import relay from "../packets/relay.js";
+import { handleHelloPhase1 } from "../handshake/handshake.js";
 
 export default function handleHello(packet, rinfo, type) {
     const { from, payload } = packet;
@@ -39,10 +40,15 @@ export default function handleHello(packet, rinfo, type) {
         return;
     }
 
-  
-    // Reply directly to their observed address immediately — this is what keeps
-    // the NAT hole open and lets the remote node hear back from us
-    // ── Step 4: Commit to peerStore ──────────────────────────────────────────
+    // ── Step 4: Handle handshake protocol (v2) ───────────────────────────────
+    // Check if this is a v2 HELLO with nonce (initiates handshake)
+    if (payload.nonceA) {
+        console.log(`[HELLO] v2 HELLO received from ${from.slice(0, 16)}... (handshake mode)`);
+        handleHelloPhase1(packet,rinfo,type);
+        return
+    }
+
+    // ── Step 5: Commit to peerStore ──────────────────────────────────────────
     if (getPeer(from)) {
         touchPeer(from, rinfo?.address, rinfo?.port, type); // refresh lastSeen for a peer we already know
         console.log(`[HELLO] Refreshed: ${from.slice(0, 16)}...`);
@@ -62,7 +68,7 @@ export default function handleHello(packet, rinfo, type) {
         console.log(`[HELLO] Shared secret established with ${from.slice(0, 16)}...`);
     }
 
-    // ── Step 5: Relay the HELLO to other peers ───────────────────────────────
+    // ── Step 6: Relay the HELLO to other peers ───────────────────────────────
     // We want everyone to know about this new peer, so we relay the HELLO packet as-is.
     relay(packet);
 

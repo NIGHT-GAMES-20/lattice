@@ -1,7 +1,7 @@
 import dgram from "dgram";
 import { readFileSync, existsSync } from "fs";
 import { getUserId } from "./core/utils.js";
-import createHello from "./packets/createHello.js";
+import { createHello, createHelloSyn } from "./packets/createHello.js";
 import { sendUDP, initUDP } from "./transport/udp.js";
 import { announce, fetchPeers } from "./network/bootstrap.js";
 import StunManager from "./network/stun.js";
@@ -70,11 +70,11 @@ lanSocket.bind(41234, async () => {
 
     // 1 — wire up Lattice transport on this socket
     initLAN(lanSocket, seenPackets);
-    broadcastLAN(createHello(userId)); 
+    broadcastLAN(createHelloSyn(userId)); 
 
     // 2 — LAN broadcast
     setInterval (()=>{
-      broadcastLAN(createHello(userId));
+      broadcastLAN(createHelloSyn(userId));
     }, 30_000)
 
 });
@@ -108,6 +108,6 @@ rl.on("line", (input) => {
           if (getPeerType(peer.id) == "lan") broadcast(msg);
         }
     } else {
-        broadcast(createMessage(userId, "*", line));
+        broadcastLAN(createMessage(userId, "*", line));
     }
 });
