@@ -58,7 +58,7 @@ export function initLAN(lanSocket, seenPackets){
 export function sendLAN(packet, host, port) {
     const buf = Buffer.from(JSON.stringify(packet));
     lan.send(buf, port, host, (err) => {
-        if (err) console.error(`[UDP] Send error to ${host}:${port}:`, err);
+        if (err) console.error(`[LAN] Send error to ${host}:${port}:`, err);
     });
 }
 

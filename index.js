@@ -86,7 +86,7 @@ lanSocket.bind(41234, async () => {
 
       //v2
       for (const addr of getSubnetBroadcasts())
-        initiateHandshake(addr, 41234)
+        initiateHandshakeLAN(addr, 41234)
     }, 30_000)
 
 });
