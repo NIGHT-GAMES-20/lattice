@@ -4,7 +4,6 @@ import { computeShared } from "../crypto/dh.js";
 import { addPeer, getPeer, touchPeer, setPeerSecret } from "../peer/peerStore.js";
 import { latticeEvents } from "../core/events.js";
 import relay from "../packets/relay.js";
-import { handleHelloPhase1 } from "../handshake/handshake.js";
 
 export default function handleHello(packet, rinfo, type) {
     const { from, payload } = packet;
@@ -40,11 +39,11 @@ export default function handleHello(packet, rinfo, type) {
         return;
     }
 
+    /// DISPATCH HANDLES v1, v2 
     // ── Step 4: Handle handshake protocol (v2) ───────────────────────────────
-    // Check if this is a v2 HELLO with nonce (initiates handshake)
+    // Check if this is a v2 HELLO with nonce (initiates handshake), if Yes, Drop it
     if (payload.nonceA) {
         console.log(`[HELLO] v2 HELLO received from ${from.slice(0, 16)}... (handshake mode)`);
-        handleHelloPhase1(packet,rinfo,type);
         return
     }
 

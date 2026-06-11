@@ -8,10 +8,13 @@ import { sendUDP } from "../transport/udp.js"
 import { broadcastLAN, sendLAN } from "../transport/lan.js";
 import { latticeEvents } from "../core/events.js";
 import createHelloSynack from "../packets/createHelloSynack.js"
-import { getUserId } from "../core/utils.js";
+import createHelloAck from "../packets/createHelloAck.js"
+import { createHelloSyn } from "../packets/createHello.js";
+import { getUserId, getUserIdFromPublicKey } from "../core/utils.js";
 
 // In-memory handshake state for each peer
-const handshakeStates = new Map();
+const handshakeStatesLAN = new Map();
+const handshakeStatesUDP = new Map();
 
 // Nonce expiration time (5 minutes)
 const NONCE_EXPIRY_MS = 5 * 60 * 1000;
@@ -52,17 +55,42 @@ function isNonceValid(createdAt) {
  * @param {object} rinfo - Remote address info {address, port}
  * @param {string} type - Transport type ('udp' or 'lan')
  */
-export function handleHelloPhase1(packet, rinfo, type) {
+export function handleHelloV2(packet, rinfo, type) {
     const { from, payload } = packet;
     
     // Extract nonces if present (for v2 handshake)
     const nonceA = payload.nonceA;
     
-    // Verify the packet (signature check)
-    // Signature Already Verified at helloHandler.js
-    
-    // Derive ID from public key to verify it matches
-    // Identification Verified at helloHandler.js
+    // ── Step 1: Basic structure checks ──────────────────────────────────────
+    if (!from || typeof from !== "string") {
+        console.warn("[HELLO] Dropped: missing or invalid 'from' field");
+        return;
+    }
+
+    if (!payload?.publicKey || typeof payload.publicKey !== "string") {
+        console.warn("[HELLO] Dropped: missing 'publicKey' in payload");
+        return;
+    }
+
+    // ── Step 2: Identity verification ────────────────────────────────────────
+    // Hash the supplied public key and check it matches the claimed userId.
+    // Prevents an attacker from announcing a stolen ID with their own key.
+    const derivedId = crypto
+        .createHash("sha256")
+        .update(payload.publicKey)
+        .digest("hex");
+
+    if (from !== derivedId) {
+        console.warn(`[HELLO] Dropped: userId mismatch for ${from.slice(0, 12)}...`);
+        return;
+    }
+
+    // ── Step 3: Signature verification ───────────────────────────────────────
+    // Proves the sender actually holds the private key — not just the public key.
+    if (!verifyPacket(packet, payload.publicKey)) {
+        console.warn(`[HELLO] Dropped: invalid signature from ${from.slice(0, 12)}...`);
+        return;
+    }
     
     
     // Check if we already know this peer
@@ -91,9 +119,10 @@ export function handleHelloPhase1(packet, rinfo, type) {
     }
 
     // Send HELLO_SYNACK to the initiator
-    if (type == "udp") sendUDP(createHelloSynack(userId, nonceA, generateNonce() ), rinfo?.address, rinfo?.port );
-    else if (type == "lan") broadcastLAN(createHelloSynack(userId, nonceA, generateNonce() ) )
-
+    if (type == "udp") 
+      sendUDP(createHelloSynack(userId, nonceA, generateNonce() ), rinfo?.address, rinfo?.port );
+    else if (type == "lan") 
+      sendLAN(createHelloSynack(userId, nonceA, generateNonce() ), rinfo?.address, rinfo?.port )
     
     // Relay the HELLO to other peers
     relay(packet);
@@ -108,10 +137,39 @@ export function handleHelloPhase1(packet, rinfo, type) {
  */
 export function handleHelloSynack(packet, rinfo) {
     const { from, payload } = packet;
+    
+    // ── Step 1: Basic structure checks ──────────────────────────────────────
+    if (!from || typeof from !== "string") {
+        console.warn("[HELLO_SYNACK] Dropped: missing or invalid 'from' field");
+        return;
+    }
+
+    if (!payload?.nonceA || !payload?.nonceB) {
+        console.warn("[HELLO_SYNACK] Dropped: missing nonce fields");
+        return;
+    }
+
+    // ── Step 2: Identity verification ────────────────────────────────────────
+    const derivedId = crypto
+        .createHash("sha256")
+        .update(payload.publicKey)
+        .digest("hex");
+
+    if (from !== derivedId) {
+        console.warn(`[HELLO_SYNACK] Dropped: userId mismatch for ${from.slice(0, 12)}...`);
+        return;
+    }
+
+    // ── Step 3: Signature verification ───────────────────────────────────────
+    if (!verifyPacket(packet, payload.publicKey)) {
+        console.warn(`[HELLO_SYNACK] Dropped: invalid signature from ${from.slice(0, 12)}...`);
+        return;
+    }
+
     const { nonceA, nonceB, publicKey, x25519PublicKey } = payload;
     
     // Verify this is for us (we should have sent nonceA)
-    const myState = handshakeStates.get(from);
+    const myState = type == "udp" ? handshakeStatesUDP.get(from) : type == "lan"  ? handshakeStatesLAN.get(rinfo?.address) : null ;
     
     if (!myState || myState.role !== "INITIATOR") {
         console.warn(`[HELLO_SYNACK] Unexpected SYNACK from ${from.slice(0, 16)}...`);
@@ -152,7 +210,11 @@ export function handleHelloSynack(packet, rinfo) {
     console.log(`[HELLO] Phase 2 complete (SYNACK received) from ${from.slice(0, 16)}...`);
     
     // Send HELLO_ACK (Phase 3)
-    sendHelloAck(from, nonceB);
+    if (type == "udp") 
+      sendUDP(createHelloAck(userId, nonceB), rinfo?.address, rinfo?.port );
+    else if (type == "lan") 
+      sendLAN(createHelloAck(userId, nonceB ), rinfo?.address, rinfo?.port )
+
 }
 
 /**
@@ -164,10 +226,52 @@ export function handleHelloSynack(packet, rinfo) {
  */
 export function handleHelloAck(packet, rinfo) {
     const { from, payload } = packet;
+    
+    // ── Step 1: Basic structure checks ──────────────────────────────────────
+    if (!from || typeof from !== "string") {
+        console.warn("[HELLO_ACK] Dropped: missing or invalid 'from' field");
+        return;
+    }
+
+    if (!payload?.nonceB) {
+        console.warn("[HELLO_ACK] Dropped: missing nonceB field");
+        return;
+    }
+
+    // ── Step 2: Identity verification ────────────────────────────────────────
+    // For HELLO_ACK, we don't require publicKey in payload since we already know the peer
+    // But if present, verify it
+    if (payload.publicKey) {
+        const derivedId = crypto
+            .createHash("sha256")
+            .update(payload.publicKey)
+            .digest("hex");
+
+        if (from !== derivedId) {
+            console.warn(`[HELLO_ACK] Dropped: userId mismatch for ${from.slice(0, 12)}...`);
+            return;
+        }
+    }
+
+    // ── Step 3: Signature verification ───────────────────────────────────────
+    // Get the public key from existing peer info if available
+    const peer = getPeer(from);
+    const publicKey = peer?.publicKey || (payload.publicKey || null);
+    
+    if (!publicKey) {
+        console.warn(`[HELLO_ACK] Dropped: no public key available for ${from.slice(0, 12)}...`);
+        return;
+    }
+
+    if (!verifyPacket(packet, publicKey)) {
+        console.warn(`[HELLO_ACK] Dropped: invalid signature from ${from.slice(0, 12)}...`);
+        return;
+    }
+
     const { nonceB } = payload;
     
     // Verify this is for us (we should have sent nonceB)
-    const myState = handshakeStates.get(from);
+    const myState = type == "udp" ? handshakeStatesUDP.get(from) : type == "lan"  ? handshakeStatesLAN.get(rinfo?.address) : null ;
     
     if (!myState || myState.role !== "RESPONDER") {
         console.warn(`[HELLO_ACK] Unexpected ACK from ${from.slice(0, 16)}...`);
@@ -201,145 +305,73 @@ export function handleHelloAck(packet, rinfo) {
     }
     
     // Clean up handshake state
-    handshakeStates.delete(from);
+    if (type == "udp") handshakeStatesUDP.delete(from);
+    else if (type == "lan") handshakeStatesLAN.delete(rinfo?.address);
 }
-/*
+
 /**
  * Initiates a handshake as the initiator (Phase 1)
  * 
- * @param {string} targetUserId - The target peer's userId
  * @param {string} targetIp - Target IP address
  * @param {number} targetPort - Target port
-
-export function initiateHandshake(targetUserId, targetIp, targetPort) {
+*/
+export function initiateHandshakeLAN(targetIp, targetPort) {
     const nonceA = generateNonce();
     
     // Store state
-    handshakeStates.set(targetUserId, {
+    handshakeStatesLAN.set(targetIp, {
         role: "INITIATOR",
         nonceA,
         createdAt: Date.now(),
         phase: "pending"
     });
     
-    console.log(`[HELLO] Initiating handshake with ${targetUserId.slice(0, 16)}...`);
-    
     // Send HELLO packet with nonce
-    const createHello = (await import("./createHello.js")).default;
-    const packet = createHello(targetUserId);
+    const packet = createHelloSyn(userId, nonceA);
     
-    // Add nonce to payload for v2 handshake
-    packet.payload.nonceA = nonceA;
-    
-    // Re-sign with updated payload
-    const signMessage = (await import("../crypto/sign.js")).default;
-    packet.signature = signMessage(JSON.stringify({
-        version: packet.version,
-        id: packet.id,
-        type: packet.type,
-        from: packet.from,
-        to: packet.to,
-        timestamp: packet.timestamp,
-        payload: packet.payload,
-    }));
     
     // Send the packet
-    const { sendUDP } = await import("../transport/udp.js");
-    sendUDP(packet, targetIp, targetPort);
+    sendLAN(packet, targetIp, targetPort )
     
-    console.log(`[HELLO] Phase 1 complete (HELLO sent) to ${targetUserId.slice(0, 16)}...`);
+    console.log(`[HELLO] Phase 1 complete (HELLO sent) to ${targetIp.slice(0, 8)}...`);
 }
 
-
- * Responds to a handshake as the responder (Phase 2)
- * 
- * @param {string} initiatorId - The initiator's userId
- * @param {string} initiatorIp - Initiator IP address
- * @param {number} initiatorPort - Initiator port
- * @param {string} nonceA - The initiator's nonce (from HELLO)
-
-export function respondToHandshake(initiatorId, initiatorIp, initiatorPort, nonceA) {
-    const nonceB = generateNonce();
+export function initiateHandshakeUDP(publickey, targetIp, targetPort) {
+    const nonceA = generateNonce();
     
+    let target = getUserIdFromPublicKey(publickey);
+
     // Store state
-    handshakeStates.set(initiatorId, {
-        role: "RESPONDER",
+    handshakeStatesUDP.set(target, {
+        role: "INITIATOR",
         nonceA,
-        nonceB,
         createdAt: Date.now(),
         phase: "pending"
     });
     
-    console.log(`[HELLO] Responding to handshake with ${initiatorId.slice(0, 16)}...`);
+    // Send HELLO packet with nonce
+    const packet = createHelloSyn(userId, nonceA);
     
-    // Send HELLO_SYNACK packet
-    const createHelloSynack = (await import("./createHelloSynack.js")).default;
-    const packet = createHelloSynack(initiatorId, nonceA, nonceB);
-    
-    // Re-sign with updated payload
-    const signMessage = (await import("../crypto/sign.js")).default;
-    packet.signature = signMessage(JSON.stringify({
-        version: packet.version,
-        id: packet.id,
-        type: packet.type,
-        from: packet.from,
-        to: packet.to,
-        timestamp: packet.timestamp,
-        payload: packet.payload,
-    }));
     
     // Send the packet
-    const { sendUDP } = await import("../transport/udp.js");
-    sendUDP(packet, initiatorIp, initiatorPort);
-    
-    console.log(`[HELLO] Phase 2 complete (HELLO_SYNACK sent) to ${initiatorId.slice(0, 16)}...`);
+    sendUDP(packet, targetIp, targetPort);
+    console.log(`[HELLO] Phase 1 complete (HELLO sent) to ${targetUserId.slice(0, 16)}...`);
 }
 
-
- * Sends HELLO_ACK as the initiator (Phase 3)
- * 
- * @param {string} targetUserId - The target peer's userId
- * @param {string} nonceB - The responder's nonce (from SYNACK)
-
-function sendHelloAck(targetUserId, nonceB) {
-    const createHelloAck = (await import("./createHelloAck.js")).default;
-    const packet = createHelloAck(targetUserId, nonceB, "hello_done");
-    
-    // Re-sign with updated payload
-    const signMessage = (await import("../crypto/sign.js")).default;
-    packet.signature = signMessage(JSON.stringify({
-        version: packet.version,
-        id: packet.id,
-        type: packet.type,
-        from: packet.from,
-        to: packet.to,
-        timestamp: packet.timestamp,
-        payload: packet.payload,
-    }));
-    
-    // Send the packet
-    const { sendUDP } = await import("../transport/udp.js");
-    const { getPeerIp, getPeerPort } = await import("../peer/peerStore.js");
-    
-    const ip = getPeerIp(targetUserId);
-    const port = getPeerPort(targetUserId);
-    
-    if (ip && port) {
-        sendUDP(packet, ip, port);
-        console.log(`[HELLO] Phase 3 complete (HELLO_ACK sent) to ${targetUserId.slice(0, 16)}...`);
-    } else {
-        console.warn(`[HELLO] Cannot send HELLO_ACK: no peer info for ${targetUserId.slice(0, 16)}...`);
-    }
-}
-*/
 /**
  * Cleans up expired handshake states
  */
 export function cleanupExpiredHandshakes() {
     const now = Date.now();
-    for (const [userId, state] of handshakeStates.entries()) {
+    for (const [userId, state] of handshakeStatesLAN.entries()) {
         if (now - state.createdAt > NONCE_EXPIRY_MS) {
-            handshakeStates.delete(userId);
+            handshakeStatesLAN.delete(userId);
+            console.log(`[HELLO] Cleaned up expired handshake with ${userId.slice(0, 16)}...`);
+        }
+    }
+    for (const [userId, state] of handshakeStatesUDP.entries()) {
+        if (now - state.createdAt > NONCE_EXPIRY_MS) {
+            handshakeStatesUDP.delete(userId);
             console.log(`[HELLO] Cleaned up expired handshake with ${userId.slice(0, 16)}...`);
         }
     }
@@ -351,8 +383,8 @@ export function cleanupExpiredHandshakes() {
  * @param {string} userId - The peer's userId
  * @returns {HandshakeState|null} The handshake state or null
  */
-export function getHandshakeState(userId) {
-    return handshakeStates.get(userId) || null;
+export function getHandshakeState(ip = null, id = null) {
+    return id ? handshakeStatesUDP.get(id) : ip ? handshakeStatesLAN.get(ip) : null;
 }
 
 /**
@@ -360,6 +392,6 @@ export function getHandshakeState(userId) {
  * 
  * @returns {Array} Array of [userId, state] pairs
  */
-export function getAllHandshakeStates() {
-    return [...handshakeStates.entries()];
+export function getAllHandshakeStates(type) {
+    return {lan: [...handshakeStatesLAN.entries()] , udp: [...handshakeStatesUDP.entries()]}
 }

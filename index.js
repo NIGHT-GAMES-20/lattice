@@ -10,7 +10,8 @@ import createMessage from "./packets/createMessage.js";
 import { getAllPeers, getPeerIp, getPeerPort, getPeerType } from "./peer/peerStore.js";
 import { latticeEvents } from "./core/events.js";
 import { generateKeys } from "./crypto/key.js";
-import { initLAN, sendLAN, broadcastLAN } from "./transport/lan.js";
+import { initLAN, sendLAN, broadcastLAN, getSubnetBroadcasts } from "./transport/lan.js";
+import { initiateHandshakeLAN } from "./handlers/handshake.js";
 
 if (!existsSync("keys/ed25519_private.pem")) {
     console.warn("[Lattice] Keys missing. Creating New Pairs");
@@ -70,11 +71,22 @@ lanSocket.bind(41234, async () => {
 
     // 1 — wire up Lattice transport on this socket
     initLAN(lanSocket, seenPackets);
-    broadcastLAN(createHelloSyn(userId)); 
+    
+    // v1
+    //broadcastLAN(createHello(userId));
+
+    //v2
+    for (const addr of getSubnetBroadcasts())
+      initiateHandshakeLAN(addr, 41234);
 
     // 2 — LAN broadcast
     setInterval (()=>{
-      broadcastLAN(createHelloSyn(userId));
+      // v1
+      //broadcastLAN(createHello(userId));
+
+      //v2
+      for (const addr of getSubnetBroadcasts())
+        initiateHandshake(addr, 41234)
     }, 30_000)
 
 });

@@ -12,3 +12,9 @@ export function getUserId() {
     const hash = crypto.createHash("sha256").update(publicKey).digest("hex");
     return hash;
 }
+
+export function getUserIdFromPublicKey(publicKey) {
+    const hash = crypto.createHash("sha256").update(publicKey).digest("hex");
+    return hash;
+}
+

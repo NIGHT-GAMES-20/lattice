@@ -84,7 +84,7 @@ export function broadcastLAN(packet) {
 }
 
 
-function getSubnetBroadcasts() {
+export function getSubnetBroadcasts() {
   const addrs = [];
   try{
     for (const ifaces of Object.values(networkInterfaces())) {

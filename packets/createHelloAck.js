@@ -22,7 +22,14 @@ export default function createHelloAck(userId, nonceB, encryptedPayload = null) 
     
     if (encryptedPayload) {
         const sharedSecret = getSharedSecret(userId);
+        encryptedPayload = {...encryptedPayload, publicKey, x25519PublicKey }
         if (sharedSecret) {
+            const ciphertext = encrypt(encryptedPayload, sharedSecret);
+            payload.encryptedPayload = ciphertext;
+        }
+    }else {
+      encryptedPayload = { publicKey, x25519PublicKey }
+      if (sharedSecret) {
             const ciphertext = encrypt(encryptedPayload, sharedSecret);
             payload.encryptedPayload = ciphertext;
         }

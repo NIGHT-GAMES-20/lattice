@@ -1,10 +1,8 @@
 import createPacket from "./createPackets.js";
 import { readFileSync } from "fs";
-import { generateNonce } from "../handshake/handshake.js"
 
-
-  const publicKey = readFileSync("keys/ed25519_public.pem", "utf8");
-  const x25519PublicKey = readFileSync("keys/x25519_public.pem", "utf8");
+const publicKey = readFileSync("keys/ed25519_public.pem", "utf8");
+const x25519PublicKey = readFileSync("keys/x25519_public.pem", "utf8");
 
 /**
  * Builds a signed HELLO broadcast packet.
@@ -39,6 +37,6 @@ export function createHello(userId) {
  * @return {Packet}      - The complete v2 HELLO packet object, ready to be sent over the network
  * 
  */
-export function createHelloSyn(userId){
-  return createPacket("HELLO", userId, "*", { publicKey:publicKey, x25519PublicKey:x25519PublicKey, nonceA: generateNonce() });
+export function createHelloSyn(userId, nonceA){
+  return createPacket("HELLO", userId, '*', { publicKey:publicKey, x25519PublicKey:x25519PublicKey, nonceA:nonceA });
 }
