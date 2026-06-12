@@ -118,11 +118,36 @@ export function handleHelloV2(packet, rinfo, type) {
         console.log(`[HELLO] Shared secret established with ${from.slice(0, 16)}...`);
     }
 
+    // FIX 1: Generate nonceB once so we can both save it and send it.
+    // Previously it was generated inline inside sendUDP/sendLAN, so the value
+    // sent to the initiator was never stored — handleHelloAck had nothing to
+    // compare against and always dropped the packet.
+    const nonceB = generateNonce();
+
+    // FIX 1 (cont): Save RESPONDER state so handleHelloAck can verify nonceB later.
+    // This was completely missing before — the responder had no record of the
+    // handshake it started, so handleHelloAck always hit "Unexpected ACK" and returned.
+    if (type === "udp") {
+        handshakeStatesUDP.set(from, {
+            role: "RESPONDER",
+            nonceB,
+            createdAt: Date.now(),
+            phase: "pending"
+        });
+    } else if (type === "lan") {
+        handshakeStatesLAN.set(rinfo.address, {
+            role: "RESPONDER",
+            nonceB,
+            createdAt: Date.now(),
+            phase: "pending"
+        });
+    }
+
     // Send HELLO_SYNACK to the initiator
-    if (type == "udp") 
-      sendUDP(createHelloSynack(userId, nonceA, generateNonce() ), rinfo?.address, rinfo?.port );
-    else if (type == "lan") 
-      sendLAN(createHelloSynack(userId, nonceA, generateNonce() ), rinfo?.address, rinfo?.port )
+    if (type === "udp") 
+      sendUDP(createHelloSynack(userId, nonceA, nonceB), rinfo?.address, rinfo?.port);
+    else if (type === "lan") 
+      sendLAN(createHelloSynack(userId, nonceA, nonceB), rinfo?.address, rinfo?.port);
     
     // Relay the HELLO to other peers
     relay(packet);
@@ -134,8 +159,13 @@ export function handleHelloV2(packet, rinfo, type) {
  * 
  * @param {object} packet - The incoming HELLO_SYNACK packet
  * @param {object} rinfo - Remote address info {address, port}
+ * @param {string} type - Transport type ('udp' or 'lan')  ← FIX 2: was missing
  */
-export function handleHelloSynack(packet, rinfo) {
+// FIX 2: Added `type` parameter. Without it, `type` was undefined everywhere
+// inside this function — myState always resolved to null (the ternary fell
+// through), so the "Unexpected SYNACK" guard fired and the function returned
+// early every single time. Phase 2 could never complete.
+export function handleHelloSynack(packet, rinfo, type) {
     const { from, payload } = packet;
     
     // ── Step 1: Basic structure checks ──────────────────────────────────────
@@ -169,7 +199,7 @@ export function handleHelloSynack(packet, rinfo) {
     const { nonceA, nonceB, publicKey, x25519PublicKey } = payload;
     
     // Verify this is for us (we should have sent nonceA)
-    const myState = type == "udp" ? handshakeStatesUDP.get(from) : type == "lan"  ? handshakeStatesLAN.get(rinfo?.address) : null ;
+    const myState = type === "udp" ? handshakeStatesUDP.get(from) : type === "lan" ? handshakeStatesLAN.get(rinfo?.address) : null;
     
     if (!myState || myState.role !== "INITIATOR") {
         console.warn(`[HELLO_SYNACK] Unexpected SYNACK from ${from.slice(0, 16)}...`);
@@ -192,12 +222,12 @@ export function handleHelloSynack(packet, rinfo) {
     myState.nonceB = nonceB;
     myState.phase = "synack_received";
     
-    // Store their public keys
+    // FIX 3: Use `type` instead of hardcoded "udp" so LAN peers are stored correctly.
     const existingPeer = getPeer(from);
     if (!existingPeer) {
-        addPeer(from, publicKey, rinfo?.address, rinfo?.port, "udp");
+        addPeer(from, publicKey, rinfo?.address, rinfo?.port, type);
     } else {
-        touchPeer(from, rinfo?.address, rinfo?.port, "udp");
+        touchPeer(from, rinfo?.address, rinfo?.port, type);
     }
     
     // Compute shared secret if X25519 key provided
@@ -210,10 +240,10 @@ export function handleHelloSynack(packet, rinfo) {
     console.log(`[HELLO] Phase 2 complete (SYNACK received) from ${from.slice(0, 16)}...`);
     
     // Send HELLO_ACK (Phase 3)
-    if (type == "udp") 
-      sendUDP(createHelloAck(userId, nonceB), rinfo?.address, rinfo?.port );
-    else if (type == "lan") 
-      sendLAN(createHelloAck(userId, nonceB ), rinfo?.address, rinfo?.port )
+    if (type === "udp") 
+      sendUDP(createHelloAck(userId, nonceB), rinfo?.address, rinfo?.port);
+    else if (type === "lan") 
+      sendLAN(createHelloAck(userId, nonceB), rinfo?.address, rinfo?.port);
 
 }
 
@@ -223,8 +253,11 @@ export function handleHelloSynack(packet, rinfo) {
  * 
  * @param {object} packet - The incoming HELLO_ACK packet
  * @param {object} rinfo - Remote address info {address, port}
+ * @param {string} type - Transport type ('udp' or 'lan')  ← FIX 2: was missing
  */
-export function handleHelloAck(packet, rinfo) {
+// FIX 2 (cont): Added `type` parameter — same root cause as handleHelloSynack.
+// myState was always null, so "Unexpected ACK" fired and Phase 3 never completed.
+export function handleHelloAck(packet, rinfo, type) {
     const { from, payload } = packet;
     
     // ── Step 1: Basic structure checks ──────────────────────────────────────
@@ -271,7 +304,7 @@ export function handleHelloAck(packet, rinfo) {
     const { nonceB } = payload;
     
     // Verify this is for us (we should have sent nonceB)
-    const myState = type == "udp" ? handshakeStatesUDP.get(from) : type == "lan"  ? handshakeStatesLAN.get(rinfo?.address) : null ;
+    const myState = type === "udp" ? handshakeStatesUDP.get(from) : type === "lan" ? handshakeStatesLAN.get(rinfo?.address) : null;
     
     if (!myState || myState.role !== "RESPONDER") {
         console.warn(`[HELLO_ACK] Unexpected ACK from ${from.slice(0, 16)}...`);
@@ -296,17 +329,17 @@ export function handleHelloAck(packet, rinfo) {
     console.log(`[HELLO] Phase 3 complete (ACK received) from ${from.slice(0, 16)}...`);
     console.log(`[HELLO] Handshake complete with ${from.slice(0, 16)}...`);
     
-    // Store peer info if not already present
+    // FIX 3 (cont): Use `type` instead of hardcoded "udp".
     const existingPeer = getPeer(from);
     if (!existingPeer) {
-        addPeer(from, myState.publicKey, rinfo?.address, rinfo?.port, "udp");
+        addPeer(from, peer?.publicKey || payload.publicKey, rinfo?.address, rinfo?.port, type);
     } else {
-        touchPeer(from, rinfo?.address, rinfo?.port, "udp");
+        touchPeer(from, rinfo?.address, rinfo?.port, type);
     }
     
     // Clean up handshake state
-    if (type == "udp") handshakeStatesUDP.delete(from);
-    else if (type == "lan") handshakeStatesLAN.delete(rinfo?.address);
+    if (type === "udp") handshakeStatesUDP.delete(from);
+    else if (type === "lan") handshakeStatesLAN.delete(rinfo?.address);
 }
 
 /**
@@ -329,9 +362,8 @@ export function initiateHandshakeLAN(targetIp, targetPort) {
     // Send HELLO packet with nonce
     const packet = createHelloSyn(userId, nonceA);
     
-    
     // Send the packet
-    sendLAN(packet, targetIp, targetPort )
+    sendLAN(packet, targetIp, targetPort);
     
     console.log(`[HELLO] Phase 1 complete (HELLO sent) to ${targetIp.slice(0, 8)}...`);
 }
@@ -352,10 +384,10 @@ export function initiateHandshakeUDP(publickey, targetIp, targetPort) {
     // Send HELLO packet with nonce
     const packet = createHelloSyn(userId, nonceA);
     
-    
     // Send the packet
     sendUDP(packet, targetIp, targetPort);
-    console.log(`[HELLO] Phase 1 complete (HELLO sent) to ${targetUserId.slice(0, 16)}...`);
+    // FIX 4: Was `targetUserId` (undefined) — the variable is named `target`.
+    console.log(`[HELLO] Phase 1 complete (HELLO sent) to ${target.slice(0, 16)}...`);
 }
 
 /**
