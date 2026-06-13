@@ -32,12 +32,15 @@ app.post('/announce', async (req, res) => {
     if (!valid) {
       return res.status(400).json({ error: 'Invalid signature' });
     }
+
+    const rndbucket = Math.floor(Math.random() * 100) + 1; 
+
     const existingPeer = await Peers.findOne({ userid });
     if (existingPeer) {
-      await Peers.updateOne({ userid }, { $set: { ip, port, publicKey, timestamp: new Date() } });
+      await Peers.updateOne({ userid }, { $set: { ip, port, publicKey, timestamp: new Date(), bucket: rndbucket } });
     }
     else {
-      await Peers.insertOne({ userid, ip, port, publicKey, timestamp: new Date() });
+      await Peers.insertOne({ userid, ip, port, publicKey, timestamp: new Date() , bucket: rndbucket });
     }
     res.json({ success: true });
   } catch (error) {
@@ -48,7 +51,18 @@ app.post('/announce', async (req, res) => {
 
 app.get('/peers', async (req, res) => {
   try {
-    const peers = await Peers.find({}).toArray();
+
+    const bucket = Math.floor(Math.random() * 100) + 1; 
+    const count = await Peers.countDocuments({ bucket });
+    const skip = Math.floor(Math.random() * Math.max(1, count - 50));
+    
+    const peers = await Peers.find(
+      { bucket },
+      { skip ,limit: 50 }
+    )
+    .toArray()
+    .map(({ _id, ...peer }) => peer);
+
     res.json(peers);
   } catch (error) {
     console.error('Error occurred while fetching peers:', error);
