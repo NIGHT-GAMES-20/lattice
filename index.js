@@ -42,6 +42,8 @@ app.post('/announce', async (req, res) => {
     else {
       await Peers.insertOne({ userid, ip, port, publicKey, timestamp: new Date() , bucket: rndbucket });
     }
+    console.log("Announce:", { userid, ip, port });
+    console.log("Signature valid:", valid);
     res.json({ success: true });
   } catch (error) {
     console.error('Error occurred while processing announce request:', error);
@@ -51,20 +53,37 @@ app.post('/announce', async (req, res) => {
 
 app.get('/peers', async (req, res) => {
   try {
+    const totalPeers = await Peers.countDocuments({}, Number.MAX_SAFE_INTEGER);
 
-    const bucket = Math.floor(Math.random() * 100) + 1; 
-    
-    const peers = (await Peers.find(
-      { bucket },
-      { limit: 50 }
-    ).toArray()).map(({ _id, ...peer }) => peer);
+    let peers;
 
-    res.json(peers);
+    if (totalPeers <= 50) {
+      peers = await Peers.find({}, {
+        limit: 1000
+      }).toArray();
+    } else {
+      const bucket = Math.floor(Math.random() * 100) + 1;
+
+      peers = await Peers.find(
+        { bucket },
+        { limit: 50 }
+      ).toArray();
+
+      // fallback if bucket is sparse
+      if (peers.length < 50) {
+        peers = await Peers.find({}, {
+          limit: 50
+        }).toArray();
+      }
+    }
+
+    res.json(
+      peers.map(({ _id, ...peer }) => peer)
+    );
   } catch (error) {
     console.error('Error occurred while fetching peers:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
-
 });
 
 app.get('/health', (req, res) => {

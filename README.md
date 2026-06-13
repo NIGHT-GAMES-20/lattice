@@ -45,6 +45,41 @@ The bootstrap server does not store or touch:
 - Perform content indexing
 - Act as a central authority over the network
 
+
+## Endpoints
+
+- `POST /annouce` Register Your Node 
+  - Required Parameters :
+    - userid - SHA256 Hashed Public Key
+    - ip - Users Public IP 
+    - port - Port on which user is active
+    - publicKey -  Public key of the user 
+    - signature - `{ userid, ip, port }` signed with the user's Private Key  
+
+- `GET /peers` Returns a list of active peers (Randomly Selected Random No. of peers) 
+  - Schema Of Returned List:
+  ```JSON
+  [
+    {
+      "userid": SHA256(PublicKey),
+      "ip": Ip address of Node A,
+      "port": Port of Node A,
+      "publicKey": Public Key of Node A,
+      "timestamp": Timestamp of the last time Node A contacted the server,
+      "bucket": Randomly assigned buckets 
+    },
+    {
+      "userid": SHA256(PublicKey),
+      "ip": Ip address of Node B,
+      "port": Port of Node B,
+      "publicKey": Public Key of Node B,
+      "timestamp": Timestamp of the last time Node B contacted the server,
+      "bucket": Randomly assigned buckets 
+    }
+    ...
+  ]
+  ```
+
 ## Privacy Notice
 
 Lattice is a peer-to-peer network. To enable direct peer connections, a node's IP address and port may be shared with other peers participating in the network.
