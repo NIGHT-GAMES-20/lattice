@@ -12,6 +12,22 @@ A peer-to-peer messaging application that enables direct communication between n
 - **Decentralized Peer Discovery**: Bootstrap server for internet-wide peer registry
 - **TTL-based Relaying**: Flood routing with TTL expiration for network propagation
 
+
+## Disclaimer
+
+Lattice is an open-source peer-to-peer networking project intended for lawful and legitimate use.
+
+The creator of Lattice strongly condemns the use of this software, protocol, or any associated services for unlawful, harmful, or abusive activities.
+
+Users are solely responsible for their actions, communications, and content transmitted through the network. By using Lattice, you acknowledge that you are responsible for complying with all applicable laws and regulations in your jurisdiction.
+
+The official Lattice discovery server is used solely for peer discovery and network bootstrapping. It does not store, relay, inspect, monitor, or moderate communications between peers, and has no technical ability to determine the contents of messages or files exchanged directly between users.
+
+As a result, the creator and operators of the official discovery server do not control, direct, or participate in user activities conducted over peer-to-peer connections established through the network.
+
+Nothing in this project should be interpreted as encouraging, endorsing, facilitating, or promoting illegal activity. Any misuse of the software is solely the responsibility of the individual or entity engaging in such conduct.
+
+
 ## Architecture
 
 ### Core Components
@@ -119,7 +135,9 @@ The project uses a public bootstrap server at:
 - URL: `https://lattice-bootstrap-server.onrender.com`
 - Endpoints:
   - `POST /announce` - Register your node
-  - `GET /peers` - Fetch known peers
+  - `GET /peers` - Fetch known peers (Randomly 50 or less peers)
+
+- More About the Server Working is present in the bootstrap-server branch
 
 ## License
 
