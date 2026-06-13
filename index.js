@@ -56,12 +56,10 @@ app.get('/peers', async (req, res) => {
     const count = await Peers.countDocuments({ bucket }, 10000);
     const skip = Math.floor(Math.random() * Math.max(1, count - 50));
     
-    const peers = await Peers.find(
+    const peers = (await Peers.find(
       { bucket },
       { skip ,limit: 50 }
-    )
-    .toArray()
-    .map(({ _id, ...peer }) => peer);
+    ).toArray()).map(({ _id, ...peer }) => peer);
 
     res.json(peers);
   } catch (error) {
