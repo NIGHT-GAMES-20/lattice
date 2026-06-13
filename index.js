@@ -53,7 +53,7 @@ app.get('/peers', async (req, res) => {
   try {
 
     const bucket = Math.floor(Math.random() * 100) + 1; 
-    const count = await Peers.countDocuments({ bucket });
+    const count = await Peers.countDocuments({ bucket }, 10000);
     const skip = Math.floor(Math.random() * Math.max(1, count - 50));
     
     const peers = await Peers.find(
