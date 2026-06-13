@@ -48,7 +48,7 @@ The bootstrap server does not store or touch:
 
 ## Endpoints
 
-- `POST /annouce` Register Your Node 
+- `POST /announce` Register Your Node 
   - Required Parameters :
     - userid - SHA256 Hashed Public Key
     - ip - Users Public IP 
