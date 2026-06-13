@@ -42,8 +42,6 @@ app.post('/announce', async (req, res) => {
     else {
       await Peers.insertOne({ userid, ip, port, publicKey, timestamp: new Date() , bucket: rndbucket });
     }
-    console.log("Announce:", { userid, ip, port });
-    console.log("Signature valid:", valid);
     res.json({ success: true });
   } catch (error) {
     console.error('Error occurred while processing announce request:', error);
